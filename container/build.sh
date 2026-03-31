@@ -13,7 +13,11 @@ CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-docker}"
 echo "Building NanoClaw agent container image..."
 echo "Image: ${IMAGE_NAME}:${TAG}"
 
-${CONTAINER_RUNTIME} build -t "${IMAGE_NAME}:${TAG}" .
+# Forward SSH agent for private git repo access during build
+eval "$(ssh-agent -s)" > /dev/null 2>&1
+ssh-add ~/.ssh/id_ed25519_nanoclaw 2>/dev/null
+
+${CONTAINER_RUNTIME} build --ssh default -t "${IMAGE_NAME}:${TAG}" .
 
 echo ""
 echo "Build complete!"

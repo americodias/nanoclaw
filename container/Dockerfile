@@ -39,6 +39,13 @@ ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 # Install agent-browser and claude-code globally
 RUN npm install -g agent-browser @anthropic-ai/claude-code
 
+# Install personal-gateway CLI (tasks, calendar, email, contacts)
+RUN mkdir -p /root/.ssh && ssh-keyscan -p 2424 git.dias.pt >> /root/.ssh/known_hosts 2>/dev/null
+RUN --mount=type=ssh uv venv --python 3.12 /opt/gateway \
+    && uv pip install --python /opt/gateway/bin/python \
+       "personal-gateway @ git+ssh://git@git.dias.pt:2424/personal/personal_gateway.git"
+ENV PATH="/opt/gateway/bin:$PATH"
+
 # Create app directory
 WORKDIR /app
 
