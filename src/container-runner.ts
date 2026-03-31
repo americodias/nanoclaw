@@ -226,6 +226,7 @@ function buildVolumeMounts(
 async function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
+  group: RegisteredGroup,
   agentIdentifier?: string,
 ): Promise<string[]> {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
@@ -269,6 +270,13 @@ async function buildContainerArgs(
     }
   }
 
+  // Named Docker volumes persist across container runs (e.g., uv/pip caches)
+  if (group.containerConfig?.dockerVolumes) {
+    for (const vol of group.containerConfig.dockerVolumes) {
+      args.push('-v', `${vol.name}:${vol.containerPath}`);
+    }
+  }
+
   args.push(CONTAINER_IMAGE);
 
   return args;
@@ -295,6 +303,7 @@ export async function runContainerAgent(
   const containerArgs = await buildContainerArgs(
     mounts,
     containerName,
+    group,
     agentIdentifier,
   );
 

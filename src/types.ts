@@ -27,8 +27,14 @@ export interface AllowedRoot {
   description?: string;
 }
 
+export interface DockerVolume {
+  name: string; // Named Docker volume (e.g., "cortex-venv")
+  containerPath: string; // Absolute path inside container (e.g., "/workspace/extra/cortex/.venv")
+}
+
 export interface ContainerConfig {
   additionalMounts?: AdditionalMount[];
+  dockerVolumes?: DockerVolume[]; // Named Docker volumes that persist across container runs
   timeout?: number; // Default: 300000 (5 minutes)
 }
 
