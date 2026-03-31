@@ -136,28 +136,12 @@ Main has read-only access to the project and read-write access to its group fold
 |----------------|-----------|--------|
 | `/workspace/project` | Project root | read-only |
 | `/workspace/group` | `groups/telegram_main/` | read-write |
-| `/workspace/extra/cortex` | `~/cortex` | read-write |
 | `/workspace/extra/personal-gateway` | `~/.config/personal-gateway` | read-write |
-| `/workspace/extra/strava-mcp` | `~/.config/strava-mcp` | read-write |
-| `/workspace/extra/cortex-granola` | `~/.config/cortex-granola` | read-only |
-
-The entrypoint symlinks config dirs into `~/.config/` so tools that read `$HOME/.config/` work transparently.
 
 Key paths inside the container:
 - `/workspace/project/store/messages.db` — SQLite database
 - `/workspace/project/store/messages.db` (registered_groups table) — Group config
 - `/workspace/project/groups/` — All group folders
-- `/workspace/extra/cortex/.venv/` — Shared Python venv (host `.venv`, on PATH)
-
-## Cortex Services
-
-The Cortex vault at `/workspace/extra/cortex` provides access to:
-
-- **Gateway CLI**: `bash /workspace/extra/cortex/.claude/skills/gateway/scripts/gateway.sh <command>` — tasks, calendar, email, contacts
-- **Strava**: `python3 /workspace/extra/cortex/.claude/skills/mcp-client/scripts/mcp_client.py call strava <tool> '<json>'`
-- **Book RAG**: `bash /workspace/extra/cortex/.claude/skills/book-rag/scripts/book-rag.sh <command>`
-- **Granola**: `python3 /workspace/extra/cortex/.claude/skills/granola/scripts/granola.py <command>`
-- **Pre-flight check**: `bash /workspace/extra/cortex/.cortex/scripts/preflight.sh` — validates all services
 
 ---
 

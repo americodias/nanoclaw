@@ -377,14 +377,13 @@ async function synthesisePiper(text: string): Promise<TtsResult> {
   const scriptDir = path.dirname(new URL(import.meta.url).pathname);
   const scriptPath = path.resolve(scriptDir, '..', 'scripts', 'piper-tts.py');
   const uvPath = (process.env.HOME || '/home/adias') + '/.local/bin/uv';
-  const cortexDir = (process.env.HOME || '/home/adias') + '/cortex';
   const envVars = {
     ...process.env,
     PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
   };
 
-  // Run the Python helper: stdin=text, stdout=WAV
-  const args = ['run', '--project', cortexDir, scriptPath, host, port];
+  // Run the Python helper via uv (--with wyoming, no project dependency)
+  const args = ['run', '--with', 'wyoming', scriptPath, host, port];
   if (voice) args.push(voice);
 
   const wavBuf = await spawnBuffer(uvPath, args, text, envVars, 30_000);
