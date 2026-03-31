@@ -143,6 +143,23 @@ Key paths inside the container:
 - `/workspace/project/store/messages.db` (registered_groups table) — Group config
 - `/workspace/project/groups/` — All group folders
 
+## Personal Gateway (tasks, calendar, email, contacts)
+
+The `personal-gateway` CLI is pre-installed. Use it for Todoist tasks, calendar events, email summaries, and contacts:
+
+```bash
+personal-gateway tasks list                    # today's tasks
+personal-gateway tasks list --filter "overdue" # overdue tasks
+personal-gateway tasks quick-add "Buy milk"    # add a task
+personal-gateway calendar today                # today's events
+personal-gateway context today                 # full daily context (tasks + calendar + email)
+personal-gateway email summary                 # unread email counts
+personal-gateway contacts search "John"        # find contacts
+personal-gateway config list-accounts          # list configured accounts
+```
+
+Output is JSON by default. Add `--human` or `-H` for human-readable output.
+
 ---
 
 ## Managing Groups
