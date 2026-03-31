@@ -40,11 +40,13 @@ ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 RUN npm install -g agent-browser @anthropic-ai/claude-code
 
 # Install personal-gateway CLI (tasks, calendar, email, contacts)
+# Install under /home/node so the non-root user owns the venv and shebangs resolve correctly
 RUN mkdir -p /root/.ssh && ssh-keyscan -p 2424 git.dias.pt >> /root/.ssh/known_hosts 2>/dev/null
-RUN --mount=type=ssh uv venv --python 3.12 /opt/gateway \
-    && uv pip install --python /opt/gateway/bin/python \
-       "personal-gateway @ git+ssh://git@git.dias.pt:2424/personal/personal_gateway.git"
-ENV PATH="/opt/gateway/bin:$PATH"
+RUN --mount=type=ssh uv venv --python 3.12 /home/node/.gateway \
+    && uv pip install --python /home/node/.gateway/bin/python \
+       "personal-gateway @ git+ssh://git@git.dias.pt:2424/personal/personal_gateway.git" \
+    && chown -R node:node /home/node/.gateway
+ENV PATH="/home/node/.gateway/bin:$PATH"
 
 # Create app directory
 WORKDIR /app

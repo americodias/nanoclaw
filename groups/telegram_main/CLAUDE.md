@@ -145,13 +145,13 @@ Key paths inside the container:
 
 ## Personal Gateway (tasks, calendar, email, contacts)
 
-The `personal-gateway` CLI is pre-installed. Use it for Todoist tasks, calendar events, email summaries, and contacts:
+The `personal-gateway` CLI is pre-installed and on PATH. Use it directly:
 
 ```bash
 personal-gateway tasks list                    # today's tasks
 personal-gateway tasks list --filter "overdue" # overdue tasks
 personal-gateway tasks quick-add "Buy milk"    # add a task
-personal-gateway calendar today                # today's events
+personal-gateway calendar list --today         # today's events
 personal-gateway context today                 # full daily context (tasks + calendar + email)
 personal-gateway email summary                 # unread email counts
 personal-gateway contacts search "John"        # find contacts
