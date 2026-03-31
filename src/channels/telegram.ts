@@ -1,9 +1,11 @@
 import https from 'https';
-import { Api, Bot } from 'grammy';
+import { Api, Bot, InputFile } from 'grammy';
 
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
+import { transcribeAudio } from '../transcription.js';
+import { initTts, ttsEnabled, synthesise } from '../tts.js';
 import { registerChannel, ChannelOpts } from './registry.js';
 import {
   Channel,
@@ -47,10 +49,15 @@ export class TelegramChannel implements Channel {
   private bot: Bot | null = null;
   private opts: TelegramChannelOpts;
   private botToken: string;
+  private ttsReady = false;
+  // Track chats that last sent a voice message — reply with voice
+  private voiceChats: Map<string, number> = new Map(); // chatJid → timestamp
+  private static VOICE_REPLY_WINDOW_MS = 300_000; // 5 minutes
 
   constructor(botToken: string, opts: TelegramChannelOpts) {
     this.botToken = botToken;
     this.opts = opts;
+    this.ttsReady = initTts();
   }
 
   async connect(): Promise<void> {
@@ -91,6 +98,8 @@ export class TelegramChannel implements Channel {
       }
 
       const chatJid = `tg:${ctx.chat.id}`;
+      // Text message received — clear voice reply mode for this chat
+      this.voiceChats.delete(chatJid);
       let content = ctx.message.text;
       const timestamp = new Date(ctx.message.date * 1000).toISOString();
       const senderName =
@@ -203,8 +212,114 @@ export class TelegramChannel implements Channel {
 
     this.bot.on('message:photo', (ctx) => storeNonText(ctx, '[Photo]'));
     this.bot.on('message:video', (ctx) => storeNonText(ctx, '[Video]'));
-    this.bot.on('message:voice', (ctx) => storeNonText(ctx, '[Voice message]'));
-    this.bot.on('message:audio', (ctx) => storeNonText(ctx, '[Audio]'));
+
+    // Voice messages: download and transcribe via Whisper
+    this.bot.on('message:voice', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      const timestamp = new Date(ctx.message.date * 1000).toISOString();
+      const senderName =
+        ctx.from?.first_name ||
+        ctx.from?.username ||
+        ctx.from?.id?.toString() ||
+        'Unknown';
+
+      let content = '[Voice message - transcription unavailable]';
+      try {
+        const file = await ctx.getFile();
+        const url = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const buffer = Buffer.from(await res.arrayBuffer());
+          const transcript = await transcribeAudio(buffer, 'ogg');
+          if (transcript) {
+            content = `[Voice: ${transcript}]`;
+          }
+        }
+      } catch (err) {
+        logger.error({ err, chatJid }, 'Failed to process voice message');
+      }
+
+      // Mark this chat for voice reply (TTS)
+      if (this.ttsReady) {
+        this.voiceChats.set(chatJid, Date.now());
+      }
+
+      const isGroup =
+        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
+      this.opts.onMessage(chatJid, {
+        id: ctx.message.message_id.toString(),
+        chat_jid: chatJid,
+        sender: ctx.from?.id?.toString() || '',
+        sender_name: senderName,
+        content,
+        timestamp,
+        is_from_me: false,
+      });
+    });
+
+    // Audio messages: also transcribe (forwarded audio files, music with voice, etc.)
+    this.bot.on('message:audio', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      const timestamp = new Date(ctx.message.date * 1000).toISOString();
+      const senderName =
+        ctx.from?.first_name ||
+        ctx.from?.username ||
+        ctx.from?.id?.toString() ||
+        'Unknown';
+
+      let content = '[Audio - transcription unavailable]';
+      try {
+        const file = await ctx.getFile();
+        const url = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const ext = file.file_path?.split('.').pop() || 'ogg';
+          const buffer = Buffer.from(await res.arrayBuffer());
+          const transcript = await transcribeAudio(buffer, ext);
+          if (transcript) {
+            content = `[Voice: ${transcript}]`;
+          }
+        }
+      } catch (err) {
+        logger.error({ err, chatJid }, 'Failed to process audio message');
+      }
+
+      if (this.ttsReady) {
+        this.voiceChats.set(chatJid, Date.now());
+      }
+
+      const isGroup =
+        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
+      this.opts.onMessage(chatJid, {
+        id: ctx.message.message_id.toString(),
+        chat_jid: chatJid,
+        sender: ctx.from?.id?.toString() || '',
+        sender_name: senderName,
+        content,
+        timestamp,
+        is_from_me: false,
+      });
+    });
     this.bot.on('message:document', (ctx) => {
       const name = ctx.message.document?.file_name || 'file';
       storeNonText(ctx, `[Document: ${name}]`);
@@ -254,6 +369,34 @@ export class TelegramChannel implements Channel {
       const options = threadId
         ? { message_thread_id: parseInt(threadId, 10) }
         : {};
+
+      // Check if we should reply with voice (last inbound was voice, within window)
+      const voiceTs = this.voiceChats.get(jid);
+      const shouldTts =
+        this.ttsReady &&
+        voiceTs &&
+        Date.now() - voiceTs < TelegramChannel.VOICE_REPLY_WINDOW_MS;
+
+      if (shouldTts) {
+        // Don't delete — keep voice mode active for all replies in this window
+        try {
+          const result = await synthesise(text);
+          if (result) {
+            await this.bot.api.sendVoice(
+              numericId,
+              new InputFile(result.audio, `reply.${result.format}`),
+              options,
+            );
+            logger.info(
+              { jid, provider: result.provider },
+              'Telegram voice reply sent',
+            );
+            return;
+          }
+        } catch (err) {
+          logger.warn({ jid, err }, 'TTS failed, falling back to text');
+        }
+      }
 
       // Telegram has a 4096 character limit per message — split if needed
       const MAX_LENGTH = 4096;
